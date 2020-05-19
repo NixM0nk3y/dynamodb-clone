@@ -1,0 +1,9 @@
+{
+    "region": "eu-west-1",
+    "bucket": "dynamodb-clone-ddbclonebucket-7f7jim4ldefh",
+    "origtable": "ddbimport",
+    "newtable": "ddbimport-new",
+    "dataimporter": {
+        "records": "01E8MGZXR1W5PCEXZ46F8ZNDA3"
+    }
+}

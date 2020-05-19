@@ -1,0 +1,294 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  dynamodb-clone
+  
+  SAM Template for dynamodb cloning infra
+
+# 
+Globals:
+  Function:
+    Timeout: 5
+
+Parameters:
+
+  sourceTableName:
+    Type: String
+    Default: "ddbimport"
+
+  destTableName:
+    Type: String
+    Default: "ddbimport-new"
+
+Resources:
+  ddbDataExportFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Runtime: go1.x
+      CodeUri: bin/
+      Handler: data-export
+      Timeout: 300
+      MemorySize: 256
+      Tracing: Active
+      Policies:
+      - Statement:
+        - Sid: AllowUpload
+          Effect: Allow
+          Action:
+          - s3:PutObject
+          Resource: !Join 
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref "ddbCloneBucket"
+              - "/*"
+      - Statement:
+        - Sid: AllowDyanmoDBRead
+          Effect: Allow
+          Action:
+          - dynamodb:Scan
+          Resource: !Join 
+            - ''
+            - - 'arn:'
+              - !Ref "AWS::Partition"
+              - ':dynamodb:'
+              - !Ref "AWS::Region"
+              - ':'
+              - !Ref "AWS::AccountId"
+              - ':table/'
+              - !Ref "sourceTableName"
+
+  ddbDataImportFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Runtime: go1.x
+      CodeUri: bin/
+      Handler: data-import
+      Timeout: 300
+      MemorySize: 256
+      Tracing: Active
+      Policies:
+      - Statement:
+        - Sid: AllowDownload
+          Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: !Join 
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref "ddbCloneBucket"
+              - "/*"
+      - Statement:
+        - Sid: AllowDyanmoDBWrite
+          Effect: Allow
+          Action:
+          - dynamodb:BatchWriteItem
+          Resource: !Join 
+            - ''
+            - - 'arn:'
+              - !Ref "AWS::Partition"
+              - ':dynamodb:'
+              - !Ref "AWS::Region"
+              - ':'
+              - !Ref "AWS::AccountId"
+              - ':table/'
+              - !Ref "destTableName"
+
+  ddbSchemaExportFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Runtime: go1.x
+      CodeUri: bin/
+      Handler: schema-export
+      Timeout: 60
+      MemorySize: 256
+      Tracing: Active
+      Policies:
+      - Statement:
+        - Sid: AllowUpload
+          Effect: Allow
+          Action:
+          - s3:PutObject
+          Resource: !Join 
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref "ddbCloneBucket"
+              - "/*"
+      - Statement:
+        - Sid: AllowDyanmoDBDescribe
+          Effect: Allow
+          Action:
+          - dynamodb:DescribeTable
+          Resource: !Join 
+            - ''
+            - - 'arn:'
+              - !Ref "AWS::Partition"
+              - ':dynamodb:'
+              - !Ref "AWS::Region"
+              - ':'
+              - !Ref "AWS::AccountId"
+              - ':table/'
+              - !Ref "sourceTableName"
+
+  ddbSchemaImportFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Runtime: go1.x
+      CodeUri: bin/
+      Handler: schema-import
+      Timeout: 60
+      MemorySize: 256
+      Tracing: Active
+      Policies:
+      - Statement:
+        - Sid: AllowUpload
+          Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: !Join 
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref "ddbCloneBucket"
+              - "/*"
+      - Statement:
+        - Sid: AllowDyanmoDBRCreate
+          Effect: Allow
+          Action:
+          - dynamodb:DescribeTable
+          - dynamodb:CreateTable
+          Resource: !Join 
+            - ''
+            - - 'arn:'
+              - !Ref "AWS::Partition"
+              - ':dynamodb:'
+              - !Ref "AWS::Region"
+              - ':'
+              - !Ref "AWS::AccountId"
+              - ':table/'
+              - !Ref "destTableName"
+
+  StatesExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt ddbSchemaExportFunction.Arn
+                  - !GetAtt ddbSchemaImportFunction.Arn
+                  - !GetAtt ddbDataExportFunction.Arn
+                  - !GetAtt ddbDataImportFunction.Arn
+
+  ddbCloneStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      DefinitionString:
+        !Sub
+          - |-
+            {
+              "Comment": "A DynamoDB Cloning function",
+              "StartAt": "SchemaExport",
+              "States": {
+                "SchemaExport": {
+                    "Type": "Task",
+                    "ResultPath": null,
+                    "Resource": "${SchemaExportArn}",
+                    "Next": "DataExport"
+                },
+                "DataExport": {
+                    "Type": "Task",
+                    "ResultPath": "$.dataexporter",
+                    "Resource": "${DataExportArn}",
+                    "Next": "ExportCompleted"
+                },
+                "ExportCompleted": {
+                    "Type": "Choice",
+                    "Choices": [
+                    {
+                        "Variable": "$.dataexporter.complete",
+                        "BooleanEquals": false,
+                        "Next": "DataExport"
+                    }
+                    ],
+                    "Default": "SchemaImport"
+                },
+                "SchemaImport": {
+                  "Type": "Task",
+                  "Resource": "${SchemaImportArn}",
+                  "ResultPath": null,
+                  "Next": "ImportData"
+                },
+                "ImportData": {
+                    "Type": "Map",
+                    "InputPath": "$",
+                    "ItemsPath": "$.dataexporter.records",
+                    "MaxConcurrency": 10,
+                    "Parameters": {
+                        "region.$": "$.region",
+                        "bucket.$": "$.bucket",
+                        "origtable.$": "$.origtable",
+                        "newtable.$": "$.newtable",
+                        "dataimporter": { "records.$": "$$.Map.Item.Value"}
+                    },
+                    "Iterator": {
+                        "StartAt": "DataImport",
+                        "States": {
+                            "DataImport": {
+                                "Type": "Task",
+                                "Resource": "${DataImportArn}",
+                                "ResultPath": "$.dataimporter",
+                                "Next": "HasCompleted"
+                            },
+                            "HasCompleted": {
+                                "Type": "Choice",
+                                "Choices": [
+                                {
+                                    "Variable": "$.dataimporter.complete",
+                                    "BooleanEquals": false,
+                                    "Next": "DataImport"
+                                }
+                                ],
+                                "Default": "ImportDone"
+                            },
+                            "ImportDone": {
+                                "Type": "Pass",
+                                "End": true
+                            }
+                        }
+                    },
+                    "ResultPath": "$.exportresults",
+                    "Next": "Done"
+                },
+                "Done": {
+                    "Type": "Pass",
+                    "End": true
+                }
+              }
+            }
+          - DataImportArn: !GetAtt ddbDataImportFunction.Arn
+            DataExportArn: !GetAtt ddbDataExportFunction.Arn
+            SchemaExportArn: !GetAtt ddbSchemaExportFunction.Arn
+            SchemaImportArn: !GetAtt ddbSchemaImportFunction.Arn
+      RoleArn: !GetAtt [ StatesExecutionRole, Arn ]
+
+  ddbCloneBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+

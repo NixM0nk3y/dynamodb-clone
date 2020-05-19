@@ -1,0 +1,80 @@
+{
+    "Comment": "A DynamoDB Cloning function",
+    "StartAt": "SchemaExport",
+    "States": {
+    "SchemaExport": {
+        "Type": "Task",
+        "ResultPath": null,
+        "Resource": "${SchemaExportArn}",
+        "Next": "DataExport"
+    },
+    "DataExport": {
+        "Type": "Task",
+        "ResultPath": "$.dataexporter",
+        "Resource": "${DataExportArn}",
+        "Next": "ExportCompleted"
+    },
+    "ExportCompleted": {
+        "Type": "Choice",
+        "Choices": [
+        {
+            "Variable": "$.dataexporter.complete",
+            "BooleanEquals": false,
+            "Next": "DataExport"
+        }
+        ],
+        "Default": "SchemaImport"
+    },
+    "SchemaImport": {
+        "Type": "Task",
+        "Resource": "${SchemaImportArn}",
+        "ResultPath": null,
+        "Next": "ImportData"
+    },
+    "ImportData": {
+        "Type": "Map",
+        "InputPath": "$",
+        "ItemsPath": "$.dataexporter.records",
+        "MaxConcurrency": 10,
+        "Parameters": {
+            "region.$": "$.region",
+            "bucket.$": "$.bucket",
+            "origtable.$": "$.origtable",
+            "newtable.$": "$.newtable",
+            "dataimporter": { "records.$": "$$.Map.Item.Value"}
+        },
+        "Iterator": {
+            "StartAt": "DataImport",
+            "States": {
+                "DataImport": {
+                    "Type": "Task",
+                    "Resource": "${DataImportArn}",
+                    "ResultPath": "$.dataimporter",
+                    "Next": "HasCompleted"
+                },
+                "HasCompleted": {
+                    "Type": "Choice",
+                    "Choices": [
+                    {
+                        "Variable": "$.dataimporter.complete",
+                        "BooleanEquals": false,
+                        "Next": "DataImport"
+                    }
+                    ],
+                    "Default": "ImportDone"
+                },
+                "ImportDone": {
+                    "Type": "Pass",
+                    "End": true
+                }
+            }
+        },
+        "ResultPath": "$.exportresults",
+        "Next": "Done"
+    },
+    "Done": {
+        "Type": "Pass",
+        "End": true
+    }
+    }
+}
