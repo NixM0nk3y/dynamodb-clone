@@ -86,24 +86,20 @@ test/stateserver/start:
 		amazon/aws-stepfunctions-local
 
 test/state/create:
-	aws stepfunctions --endpoint http://localhost:8083 create-state-machine --definition "{\
-	\"Comment\": \"A Hello World example of the Amazon States Language using an AWS Lambda Local function\",\
-	\"StartAt\": \"HelloWorld\",\
-	\"States\": {\
-		\"HelloWorld\": {\
-		\"Type\": \"Task\",\
-		\"Resource\": \"arn:aws:lambda:eu-west-1:123456789012:function:ddbSchemaExportFunction\",\
-		\"End\": true\
-		}\
-	}\
-	}\
-	}}" --name "HelloWorld" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
+
+	yq -r .Resources.ddbCloneStateMachine.Properties.DefinitionString[0] template.yaml > /tmp/state.json
+	sed -i 's/$${SchemaImportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbSchemaImportFunction/g' /tmp/state.json
+	sed -i 's/$${SchemaExportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbSchemaExportFunction/g' /tmp/state.json
+	sed -i 's/$${DataImportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbDataImportFunction/g' /tmp/state.json
+	sed -i 's/$${DataExportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbDataExportFunction/g' /tmp/state.json
+
+	aws stepfunctions --endpoint http://localhost:8083 create-state-machine --definition '$(shell cat /tmp/state.json)' --name "ddbClone" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
 
 test/state/start:
-	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:HelloWorld --name test
+	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:ddbClone --name test
 
 test/state/result:
-	aws stepfunctions --endpoint http://localhost:8083 describe-execution --execution-arn arn:aws:states:eu-west-1:123456789012:execution:HelloWorld:test
+	aws stepfunctions --endpoint http://localhost:8083 describe-execution --execution-arn arn:aws:states:eu-west-1:123456789012:execution:ddbClone:test
 
 test/stateserver/stop:
 	docker stop stateserver
