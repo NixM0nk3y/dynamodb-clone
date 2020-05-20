@@ -20,9 +20,9 @@ DATE=$(shell date -u '+%Y%m%d')
 all: test build_dataexport build_dataimport build_schemaexport build_schemaimport
 
 deps:
-
-build_dataexport: 
-		$(GOBUILD) -ldflags " \
+	go get -v  ./...
+build_dataexport:
+	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
@@ -32,7 +32,7 @@ test_dataexport: build_dataexport
 	sam local invoke "ddbDataExportFunction" --event ./events/config.json
 
 build_dataimport: 
-		$(GOBUILD) -ldflags " \
+	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
@@ -42,7 +42,7 @@ test_dataimport: build_dataimport
 	sam local invoke "ddbDataImportFunction" --event ./events/import.json
 
 build_schemaexport: 
-		$(GOBUILD) -ldflags " \
+	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
@@ -52,7 +52,7 @@ test_schemaexport: build_schemaexport
 	sam local invoke "ddbSchemaExportFunction" --event ./events/config.json
 
 build_schemaimport: 
-		$(GOBUILD) -ldflags " \
+	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
