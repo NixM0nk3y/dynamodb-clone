@@ -79,24 +79,30 @@ clone/run:
 clone/destroy:
 	aws cloudformation delete-stack --stack-name dynamodb-clone
 
-test/stateserver/start:
-	docker run -d -p 8083:8083 --rm --name=stateserver \
-		--env AWS_DEFAULT_REGION="eu-west-1" \
-		--env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-		--env AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-		--env AWS_SECURITY_TOKEN="${AWS_SECURITY_TOKEN}" \
-		--env LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
-		amazon/aws-stepfunctions-local
+test/dynamodb/create:
+	aws --endpoint-url=http://localhost:4566 \
+		dynamodb create-table \
+		--table-name ProductCatalog \
+		--attribute-definitions AttributeName=Id,AttributeType=N \
+		--key-schema AttributeName=Id,KeyType=HASH \
+		--billing-mode PAY_PER_REQUEST 
 
-test/stateserver/stop:
-	docker stop stateserver
+test/dynamodb/load:
+	aws --endpoint-url=http://localhost:4566 \
+		dynamodb batch-write-item  \
+		--request-items file://data/ProductCatalog.json
+ 
+test/localstack/start:
+	docker run -d -p 4566:4566 --rm --name=localstack \
+		--env DEFAULT_REGION="eu-west-1" \
+		--env FORCE_NONINTERACTIVE="true" \
+		--env SKIP_INFRA_DOWNLOADS="true" \
+                --env SERVICES="s3,dynamodb,stepfunctions" \
+                --env STEPFUNCTIONS_LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
+                localstack/localstack-light
 
-test/dynamodb/start:
-	docker run -d -p 8000:8000 --rm --name=dynamodb \
-		amazon/dynamodb-local
-
-test/dynamodb/stop:
-	docker stop dynamodb
+test/localstack/stop:
+	docker stop localstack
 
 test/state/create:
 
@@ -106,13 +112,13 @@ test/state/create:
 	sed -i 's/$${DataImportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbDataImportFunction/g' /tmp/state.json
 	sed -i 's/$${DataExportArn}/arn:aws:lambda:eu-west-1:123456789012:function:ddbDataExportFunction/g' /tmp/state.json
 
-	aws stepfunctions --endpoint http://localhost:8083 create-state-machine --definition '$(shell cat /tmp/state.json)' --name "ddbClone" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
+	aws stepfunctions --endpoint http://localhost:4566 create-state-machine --definition '$(shell cat /tmp/state.json)' --name "ddbClone" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
 
 test/state/start:
-	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:ddbClone --input '{ "region": "eu-west-1", "bucket": "${TESTBUCKET}", "origtable": "${SOURCEDB}", "newtable": "${DESTDB}" }' --name test
+	aws stepfunctions --endpoint http://localhost:4566 start-execution --state-machine arn:aws:states:eu-west-1:000000000000:stateMachine:ddbClone --input '{ "region": "eu-west-1", "bucket": "${TESTBUCKET}", "origtable": "${SOURCEDB}", "newtable": "${DESTDB}" }' --name test
 
 test/state/result:
-	aws stepfunctions --endpoint http://localhost:8083 describe-execution --execution-arn arn:aws:states:eu-west-1:123456789012:execution:ddbClone:test
+	aws stepfunctions --endpoint http://localhost:4566 describe-execution --execution-arn arn:aws:states:eu-west-1:000000000000:execution:ddbClone:test
 
 test/lamda/start:
 	sam local start-lambda
