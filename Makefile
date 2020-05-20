@@ -17,6 +17,9 @@ SOURCEDB ?= ddbimport
 # destination database
 DESTDB ?= ddbimport-new
 
+# bucket used for test
+TESTBUCKET ?= test-bucket
+
 COMMIT=$(shell git rev-list -1 HEAD --abbrev-commit)
 DATE=$(shell date -u '+%Y%m%d')
 
@@ -82,8 +85,18 @@ test/stateserver/start:
 		--env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
 		--env AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
 		--env AWS_SECURITY_TOKEN="${AWS_SECURITY_TOKEN}" \
-		--env LAMBDA_ENDPOINT="http://localhost:3001" \
+		--env LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
 		amazon/aws-stepfunctions-local
+
+test/stateserver/stop:
+	docker stop stateserver
+
+test/dynamodb/start:
+	docker run -d -p 8000:8000 --rm --name=dynamodb \
+		amazon/dynamodb-local
+
+test/dynamodb/stop:
+	docker stop dynamodb
 
 test/state/create:
 
@@ -96,13 +109,10 @@ test/state/create:
 	aws stepfunctions --endpoint http://localhost:8083 create-state-machine --definition '$(shell cat /tmp/state.json)' --name "ddbClone" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
 
 test/state/start:
-	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:ddbClone --name test
+	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:ddbClone --input '{ "region": "eu-west-1", "bucket": "${TESTBUCKET}", "origtable": "${SOURCEDB}", "newtable": "${DESTDB}" }' --name test
 
 test/state/result:
 	aws stepfunctions --endpoint http://localhost:8083 describe-execution --execution-arn arn:aws:states:eu-west-1:123456789012:execution:ddbClone:test
-
-test/stateserver/stop:
-	docker stop stateserver
 
 test/lamda/start:
 	sam local start-lambda
