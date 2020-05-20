@@ -9,6 +9,9 @@ BINARY_NAME=dynamodb-clone
 VERSION=1.0.0
 
 # source database
+SAMBUCKET ?= aws-sam-cli-managed-default-samclisourcebucket-1bac5dz9xjbuu
+
+# source database
 SOURCEDB ?= ddbimport
 
 # destination database
@@ -17,57 +20,63 @@ DESTDB ?= ddbimport-new
 COMMIT=$(shell git rev-list -1 HEAD --abbrev-commit)
 DATE=$(shell date -u '+%Y%m%d')
 
-all: test build_dataexport build_dataimport build_schemaexport build_schemaimport
+all: test dataimport/build dataexport/build schemaexport/build schemaimport/build
 
 deps:
 	go get -v  ./...
-build_dataexport:
+dataexport/build:
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/data-export -v ./table/data-export
 
-test_dataexport: build_dataexport
+dataexport/test: build_dataexport
 	sam local invoke "ddbDataExportFunction" --event ./events/config.json
 
-build_dataimport: 
+dataimport/build: 
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/data-import -v ./table/data-import
 
-test_dataimport: build_dataimport
+dataimport/test: build_dataimport
 	sam local invoke "ddbDataImportFunction" --event ./events/import.json
 
-build_schemaexport: 
+schemaexport/build: 
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/schema-export -v ./table/schema-export
 
-test_schemaexport: build_schemaexport
+schemaexport/test: build_schemaexport
 	sam local invoke "ddbSchemaExportFunction" --event ./events/config.json
 
-build_schemaimport: 
+schemaimport/build: 
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildHash=${COMMIT} \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/schema-import -v ./table/schema-import
 
-test_schemaimport: build_schemaimport
+schemaimport/test: build_schemaimport
 	sam local invoke "ddbSchemaImportFunction" --event ./events/config.json
 
-deploy: build_dataexport build_dataimport build_schemaexport build_schemaimport
-	sam deploy  --no-confirm-changeset --parameter-overrides ParameterKey=sourceTableName,ParameterValue=${SOURCEDB} ParameterKey=destTableName,ParameterValue=${DESTDB} 
+clone/deploy: build_dataexport build_dataimport build_schemaexport build_schemaimport
+	sam deploy  --no-confirm-changeset --s3-bucket=${SAMBUCKET} --parameter-overrides ParameterKey=sourceTableName,ParameterValue=${SOURCEDB} ParameterKey=destTableName,ParameterValue=${DESTDB} 
 
-destroy:
+clone/run:
+	$(eval CLONEBUCKET=$(shell aws cloudformation describe-stack-resources --stack-name dynamodb-clone | jq -rc '.StackResources[] | select( .ResourceType == "AWS::S3::Bucket" )| .PhysicalResourceId'))
+	$(eval STATEMACHINE=$(shell aws cloudformation describe-stack-resources --stack-name dynamodb-clone | jq -rc '.StackResources[] | select( .ResourceType == "AWS::StepFunctions::StateMachine" )| .PhysicalResourceId'))
+
+	aws stepfunctions start-execution --state-machine ${STATEMACHINE} --input '{ "region": "eu-west-1", "bucket": "${CLONEBUCKET}", "origtable": "${SOURCEDB}", "newtable": "${DESTDB}" }'
+
+clone/destroy:
 	aws cloudformation delete-stack --stack-name dynamodb-clone
 
-local_state_start:
+test/stateserver/start:
 	docker run -d -p 8083:8083 --rm --name=stateserver \
 		--env AWS_DEFAULT_REGION="eu-west-1" \
 		--env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
@@ -76,7 +85,7 @@ local_state_start:
 		--env LAMBDA_ENDPOINT="http://localhost:3001" \
 		amazon/aws-stepfunctions-local
 
-create_state:
+test/state/create:
 	aws stepfunctions --endpoint http://localhost:8083 create-state-machine --definition "{\
 	\"Comment\": \"A Hello World example of the Amazon States Language using an AWS Lambda Local function\",\
 	\"StartAt\": \"HelloWorld\",\
@@ -90,21 +99,21 @@ create_state:
 	}\
 	}}" --name "HelloWorld" --role-arn "arn:aws:iam::012345678901:role/DummyRole"
 
-start_state:
+test/state/start:
 	aws stepfunctions --endpoint http://localhost:8083 start-execution --state-machine arn:aws:states:eu-west-1:123456789012:stateMachine:HelloWorld --name test
 
-result_state:
+test/state/result:
 	aws stepfunctions --endpoint http://localhost:8083 describe-execution --execution-arn arn:aws:states:eu-west-1:123456789012:execution:HelloWorld:test
 
-local_state_stop:
+test/stateserver/stop:
 	docker stop stateserver
 
-local_lamda_start:
+test/lamda/start:
 	sam local start-lambda
 
 test: 
 		$(GOTEST) -v ./...
 clean: 
 		$(GOCLEAN)
-		rm -f export
+		rm -f ./bin/*
 
