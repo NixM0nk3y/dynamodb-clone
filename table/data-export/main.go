@@ -61,8 +61,9 @@ func (dr *DataReader) storeItems(items []map[string]*dynamodb.AttributeValue) (s
 	logger.Info("storing items", zap.Int("records", len(records)))
 
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(dr.input.Region),
-		//LogLevel:   aws.LogLevel(aws.LogDebugWithHTTPBody),
+		Region:   aws.String(dr.input.Region),
+		Logger:   &log.AWSLogger{},
+		LogLevel: log.AWSLevel(),
 	})
 
 	if err != nil {
@@ -111,7 +112,8 @@ func (dr *DataReader) dynamodbScan() (output state.ExportResult, err error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:     aws.String(dr.input.Region),
 		MaxRetries: aws.Int(5),
-		//LogLevel:   aws.LogLevel(aws.LogDebugWithHTTPBody),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
 	})
 
 	if err != nil {

@@ -14,7 +14,8 @@ func (l *XrayLogger) Log(ll xraylog.LogLevel, msg fmt.Stringer) {
 
 	switch ll {
 	case xraylog.LogLevelDebug:
-		logger.Debug(msg.String())
+		// noisy at debug
+		//logger.Debug(msg.String())
 	case xraylog.LogLevelInfo:
 		logger.Info(msg.String())
 	case xraylog.LogLevelWarn:

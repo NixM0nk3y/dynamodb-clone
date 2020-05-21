@@ -45,7 +45,9 @@ func (sr *SchemaReader) storeSchema(schema *dynamodb.DescribeTableOutput) (resul
 	logger.Info(fmt.Sprintf("storing schema for %s", sr.input.OrigTableName))
 
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(sr.input.Region),
+		Region:   aws.String(sr.input.Region),
+		Logger:   &log.AWSLogger{},
+		LogLevel: log.AWSLevel(),
 	})
 
 	if err != nil {
@@ -84,7 +86,8 @@ func (sr *SchemaReader) dynamodbSchemaExport() (result bool, err error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:     aws.String(sr.input.Region),
 		MaxRetries: aws.Int(5),
-		//LogLevel:   aws.LogLevel(aws.LogDebugWithHTTPBody),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
 	})
 
 	if err != nil {

@@ -34,7 +34,7 @@ dataexport/build:
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/data-export -v ./table/data-export
 
-dataexport/test: build_dataexport
+dataexport/test: dataexport/build
 	sam local invoke "ddbDataExportFunction" --event ./events/config.json
 
 dataimport/build: 
@@ -44,7 +44,7 @@ dataimport/build:
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/data-import -v ./table/data-import
 
-dataimport/test: build_dataimport
+dataimport/test: dataimport/build
 	sam local invoke "ddbDataImportFunction" --event ./events/import.json
 
 schemaexport/build: 
@@ -54,7 +54,7 @@ schemaexport/build:
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/schema-export -v ./table/schema-export
 
-schemaexport/test: build_schemaexport
+schemaexport/test: schemaexport/build
 	sam local invoke "ddbSchemaExportFunction" --event ./events/config.json
 
 schemaimport/build: 
@@ -64,10 +64,10 @@ schemaimport/build:
 		-X github.com/NixM0nk3y/dynamodb-clone/version.BuildDate=${DATE}" \
 		-o ./bin/schema-import -v ./table/schema-import
 
-schemaimport/test: build_schemaimport
+schemaimport/test: schemaimport/build
 	sam local invoke "ddbSchemaImportFunction" --event ./events/config.json
 
-clone/deploy: build_dataexport build_dataimport build_schemaexport build_schemaimport
+clone/deploy: dataexport/build dataimport/build schemaexport/build schemaimport/build
 	sam deploy  --no-confirm-changeset --s3-bucket=${SAMBUCKET} --parameter-overrides ParameterKey=sourceTableName,ParameterValue=${SOURCEDB} ParameterKey=destTableName,ParameterValue=${DESTDB} 
 
 clone/run:

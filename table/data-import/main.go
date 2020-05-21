@@ -41,6 +41,8 @@ func (dw *DataWriter) retrieveData(key string) (records []map[string]*dynamodb.A
 	sess, err := session.NewSession(&aws.Config{
 		Region:     aws.String(dw.input.Region),
 		MaxRetries: aws.Int(5),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
 	})
 
 	if err != nil {
@@ -103,7 +105,8 @@ func (dw *DataWriter) dynamodbImport() (output state.ImportResult, err error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:     aws.String(dw.input.Region),
 		MaxRetries: aws.Int(5),
-		//LogLevel:   aws.LogLevel(aws.LogDebugWithHTTPBody),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
 	})
 
 	if err != nil {

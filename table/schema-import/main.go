@@ -35,7 +35,9 @@ func (sw *SchemaWriter) retrieveSchema() (tableSchema map[string]interface{}, er
 	logger.Info(fmt.Sprintf("retrieving schema for %s", sw.input.OrigTableName))
 
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(sw.input.Region),
+		Region:   aws.String(sw.input.Region),
+		Logger:   &log.AWSLogger{},
+		LogLevel: log.AWSLevel(),
 	})
 
 	if err != nil {
@@ -188,7 +190,8 @@ func (sw *SchemaWriter) dynamodbSchemaImport() (result bool, err error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:     aws.String(sw.input.Region),
 		MaxRetries: aws.Int(5),
-		//LogLevel:   aws.LogLevel(aws.LogDebugWithHTTPBody),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
 	})
 
 	if err != nil {
