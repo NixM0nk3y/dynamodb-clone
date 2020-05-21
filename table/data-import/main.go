@@ -231,12 +231,12 @@ nextbatch:
 
 				unprocessedWrites := result.UnprocessedItems[dw.input.NewTableName]
 
-				logger.Debug("write completed",
-					zap.Int64("writetime", time.Now().Sub(writestart).Milliseconds()),
-					zap.Int("items", len(records)),
-					zap.Int("unprocessed", len(unprocessedWrites)))
-
 				if len(unprocessedWrites) == 0 {
+
+					logger.Debug("write completed",
+						zap.Int64("writetime", time.Now().Sub(writestart).Milliseconds()),
+						zap.Int("items", len(records)),
+					)
 
 					// reset backoff
 					boff.Reset()
@@ -249,7 +249,7 @@ nextbatch:
 
 				} else {
 
-					logger.Info("partial write detected",
+					logger.Debug("partial write detected",
 						zap.Int64("writetime", time.Now().Sub(writestart).Milliseconds()),
 						zap.Int("items", len(records)),
 						zap.Int("unprocessed", len(unprocessedWrites)))
