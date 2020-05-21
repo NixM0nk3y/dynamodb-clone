@@ -6,10 +6,10 @@ import (
 	"github.com/aws/aws-xray-sdk-go/xraylog"
 )
 
-//
+// XrayLogger is
 type XrayLogger struct{}
 
-//
+// Log is
 func (l *XrayLogger) Log(ll xraylog.LogLevel, msg fmt.Stringer) {
 
 	switch ll {

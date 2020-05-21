@@ -2,9 +2,13 @@ package log
 
 import (
 	"context"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/NixM0nk3y/dynamodb-clone/version"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // https://blog.gopheracademy.com/advent-2016/context-logging/
@@ -18,17 +22,42 @@ const (
 // Default logger of the system.
 var logger *zap.Logger
 
+var logLevelSeverity = map[string]zapcore.Level{
+	"DEBUG":     zapcore.DebugLevel,
+	"INFO":      zapcore.InfoLevel,
+	"WARNING":   zapcore.WarnLevel,
+	"ERROR":     zapcore.ErrorLevel,
+	"CRITICAL":  zapcore.DPanicLevel,
+	"ALERT":     zapcore.PanicLevel,
+	"EMERGENCY": zapcore.FatalLevel,
+}
+
 func init() {
 
 	buildVersion := version.Version
 	buildHash := version.BuildHash
 	buildDate := version.BuildDate
 
-	defaultLogger, LoggerErr := zap.NewProduction()
-	if LoggerErr != nil {
-		panic("failed to initilize logger: " + LoggerErr.Error())
+	logLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
+
+	if logLevel == "" {
+		logLevel = "INFO"
 	}
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		nanos := t.UnixNano()
+		millis := nanos / int64(time.Millisecond)
+		enc.AppendInt64(millis)
+	}
+	encoder := zapcore.NewJSONEncoder(config)
+	atom := zap.NewAtomicLevel()
+	defaultLogger := zap.New(zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), atom))
+
 	defer defaultLogger.Sync()
+
+	atom.SetLevel(logLevelSeverity[logLevel])
+
 	logger = defaultLogger.With(zap.String("v", buildVersion), zap.String("bh", buildHash), zap.String("bd", buildDate))
 }
 

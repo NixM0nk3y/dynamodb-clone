@@ -29,6 +29,9 @@ Resources:
       Timeout: 300
       MemorySize: 256
       Tracing: Active
+      Environment:
+        Variables:
+          LOG_LEVEL: DEBUG
       Policies:
         - Statement:
             - Sid: AllowUpload
@@ -65,6 +68,9 @@ Resources:
       Timeout: 300
       MemorySize: 256
       Tracing: Active
+      Environment:
+        Variables:
+          LOG_LEVEL: DEBUG
       Policies:
         - Statement:
             - Sid: AllowDownload
@@ -101,6 +107,9 @@ Resources:
       Timeout: 60
       MemorySize: 256
       Tracing: Active
+      Environment:
+        Variables:
+          LOG_LEVEL: DEBUG
       Policies:
         - Statement:
             - Sid: AllowUpload
@@ -137,6 +146,9 @@ Resources:
       Timeout: 60
       MemorySize: 256
       Tracing: Active
+      Environment:
+        Variables:
+          LOG_LEVEL: DEBUG
       Policies:
         - Statement:
             - Sid: AllowUpload
