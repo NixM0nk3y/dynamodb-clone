@@ -146,17 +146,17 @@ func (dw *DataWriter) dynamodbImport() (output state.ImportResult, err error) {
 
 	// batch loop through the data
 nextbatch:
-	for i := output.Processed; i < int64(len(data)); i += dw.input.ImportConfig.BatchSize {
+	for start := output.Processed; start < int64(len(data)); start += dw.input.ImportConfig.BatchSize {
 
 		// end of current batch
-		j := i + int64(dw.input.ImportConfig.BatchSize)
+		end := start + int64(dw.input.ImportConfig.BatchSize)
 
 		// end of slice
-		if j > int64(len(data)) {
-			j = int64(len(data))
+		if end > int64(len(data)) {
+			end = int64(len(data))
 		}
 
-		records := data[i:j]
+		records := data[start:end]
 
 		// build our write request
 		writeRequests := make([]*dynamodb.WriteRequest, len(records))
