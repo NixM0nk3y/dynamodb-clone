@@ -208,6 +208,27 @@ nextbatch:
 					},
 				})
 
+				if writeErr != nil {
+					if awsErr, ok := writeErr.(awserr.Error); ok {
+						// process SDK error
+						switch awsErr.Code() {
+						case dynamodb.ErrCodeProvisionedThroughputExceededException, dynamodb.ErrCodeRequestLimitExceeded, "ThrottlingException":
+
+							logger.Warn("thoughput error backing off", zap.Int64("itemcount", output.Processed), zap.Error(writeErr))
+
+							// need to sleep when re-requesting, per spec
+							if err := aws.SleepWithContext(dw.ctx, boff.NextBackOff()); err != nil {
+								logger.Panic("timed out", zap.Error(err))
+							}
+						default:
+							logger.Panic("unknown dynamodb error", zap.Error(writeErr))
+						}
+
+					} else {
+						logger.Panic("unknown error", zap.Error(writeErr))
+					}
+				}
+
 				unprocessedWrites := result.UnprocessedItems[dw.input.NewTableName]
 
 				logger.Debug("write completed",
@@ -225,34 +246,22 @@ nextbatch:
 
 					// onto next batch
 					continue nextbatch
+
+				} else {
+
+					logger.Info("partial write detected",
+						zap.Int64("writetime", time.Now().Sub(writestart).Milliseconds()),
+						zap.Int("items", len(records)),
+						zap.Int("unprocessed", len(unprocessedWrites)))
+
+					// process any remaining writes first
+					// ( will be a short write i.e. less then the 25 items we *could* do)
+					writeRequests = unprocessedWrites
+
 				}
 
-				// process any remaining writes first ( will be potentially be a short write )
-				writeRequests = unprocessedWrites
-
-				if writeErr != nil {
-					if awsErr, ok := writeErr.(awserr.Error); ok {
-						// process SDK error
-						switch awsErr.Code() {
-						case dynamodb.ErrCodeProvisionedThroughputExceededException, dynamodb.ErrCodeRequestLimitExceeded:
-
-							logger.Warn("thoughput error backing off", zap.Int64("itemcount", output.Processed), zap.Error(writeErr))
-
-							// need to sleep when re-requesting, per spec
-							if err := aws.SleepWithContext(dw.ctx, boff.NextBackOff()); err != nil {
-								logger.Panic("timed out", zap.Error(err))
-							}
-							// retry the write
-							continue
-						default:
-							logger.Panic("unknown dynamodb error", zap.Error(writeErr))
-						}
-
-					} else {
-						logger.Panic("unknown error", zap.Error(writeErr))
-					}
-				}
 			}
+
 		}
 	}
 
