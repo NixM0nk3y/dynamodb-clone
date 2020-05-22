@@ -74,7 +74,7 @@ func (dw *DataWriter) retrieveData(key string) (records []map[string]*dynamodb.A
 
 	for s.Scan() {
 		var item map[string]interface{}
-		if errJSON := json.Unmarshal(s.Bytes(), &item); err != nil {
+		if errJSON := json.Unmarshal(s.Bytes(), &item); errJSON != nil {
 			logger.Panic("unable unmarshal record from JSON", zap.Error(errJSON))
 		}
 		av, attributeErr := dynamodbattribute.MarshalMap(item)
@@ -86,7 +86,7 @@ func (dw *DataWriter) retrieveData(key string) (records []map[string]*dynamodb.A
 	}
 
 	if scanErr := s.Err(); scanErr != nil {
-		logger.Panic("unable unmarshal record from JSON", zap.Error(scanErr))
+		logger.Panic("unable unmarshal JSON records from datafile", zap.Error(scanErr))
 	}
 
 	return
