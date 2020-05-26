@@ -168,6 +168,8 @@ nextbatch:
 			}
 		}
 
+		var writeSize int64 = 0
+
 		// write retry loop
 		for {
 			select {
@@ -231,6 +233,8 @@ nextbatch:
 
 				unprocessedWrites := result.UnprocessedItems[dw.input.NewTableName]
 
+				writeSize += int64(len(writeRequests) - len(unprocessedWrites))
+
 				if len(unprocessedWrites) == 0 {
 
 					logger.Debug("write completed",
@@ -242,7 +246,7 @@ nextbatch:
 					boff.Reset()
 
 					// add to tally
-					output.Processed += int64(len(records))
+					output.Processed += writeSize
 
 					// onto next batch
 					continue nextbatch
@@ -266,6 +270,8 @@ nextbatch:
 	}
 
 	ticker.Stop()
+
+	logger.Info("record import complete", zap.String("record", output.Records), zap.Int64("count", output.Processed))
 
 	output.Complete = true
 
