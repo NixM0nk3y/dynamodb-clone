@@ -20,6 +20,9 @@ DESTDB ?= ddbimport-new
 # bucket used for test
 TESTBUCKET ?= test-bucket
 
+# no errors by default
+ERRORPROB ?= 0.0
+
 COMMIT=$(shell git rev-list -1 HEAD --abbrev-commit)
 DATE=$(shell date -u '+%Y%m%d')
 
@@ -97,7 +100,7 @@ test/dynamodb/create:
 		--table-name ${SOURCEDB} \
 		--attribute-definitions AttributeName=Id,AttributeType=N \
 		--key-schema AttributeName=Id,KeyType=HASH \
-		--billing-mode PAY_PER_REQUEST 
+		--billing-mode PAY_PER_REQUEST
 
 test/dynamodb/load:
 	aws --endpoint-url=http://localhost:4566 \
@@ -112,10 +115,10 @@ test/localstack/start:
 		--env DEFAULT_REGION="eu-west-1" \
 		--env FORCE_NONINTERACTIVE="true" \
 		--env SKIP_INFRA_DOWNLOADS="true" \
-			--env SERVICES="s3,dynamodb,stepfunctions" \
-			--end DYNAMODB_ERROR_PROBABILITY="0.1" \
-			--env STEPFUNCTIONS_LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
-			localstack/localstack-light
+		--env SERVICES="s3,dynamodb,stepfunctions" \
+		--env DYNAMODB_ERROR_PROBABILITY="${ERRORPROB}" \
+		--env STEPFUNCTIONS_LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
+		localstack/localstack-light
 
 test/localstack/stop:
 	docker stop localstack
