@@ -37,6 +37,9 @@ dataexport/build:
 dataexport/test: dataexport/build
 	sam local invoke "ddbDataExportFunction" --event ./events/config.json
 
+dataexport/local/test: dataexport/build
+	sam local invoke "ddbDataExportFunction" --event ./test/config.json --env-vars ./test/testenvironment.json
+
 dataimport/build: 
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
@@ -46,6 +49,9 @@ dataimport/build:
 
 dataimport/test: dataimport/build
 	sam local invoke "ddbDataImportFunction" --event ./events/import.json
+
+dataimport/local/test: dataimport/build
+	sam local invoke "ddbDataImportFunction" --event ./test/config.json --env-vars ./test/testenvironment.json
 
 schemaexport/build: 
 	$(GOBUILD) -ldflags " \
@@ -57,6 +63,9 @@ schemaexport/build:
 schemaexport/test: schemaexport/build
 	sam local invoke "ddbSchemaExportFunction" --event ./events/config.json
 
+schemaexport/local/test: schemaexport/build
+	sam local invoke "ddbSchemaExportFunction" --event ./test/config.json --env-vars ./test/testenvironment.json
+
 schemaimport/build: 
 	$(GOBUILD) -ldflags " \
 		-X github.com/NixM0nk3y/dynamodb-clone/version.Version=${VERSION} \
@@ -66,6 +75,9 @@ schemaimport/build:
 
 schemaimport/test: schemaimport/build
 	sam local invoke "ddbSchemaImportFunction" --event ./events/config.json
+
+schemaimport/local/test: schemaimport/build
+	sam local invoke "ddbSchemaImportFunction" --event ./test/config.json --env-vars ./test/testenvironment.json
 
 clone/deploy: dataexport/build dataimport/build schemaexport/build schemaimport/build
 	sam deploy  --no-confirm-changeset --s3-bucket=${SAMBUCKET} --parameter-overrides ParameterKey=sourceTableName,ParameterValue=${SOURCEDB} ParameterKey=destTableName,ParameterValue=${DESTDB} 
@@ -82,7 +94,7 @@ clone/destroy:
 test/dynamodb/create:
 	aws --endpoint-url=http://localhost:4566 \
 		dynamodb create-table \
-		--table-name ProductCatalog \
+		--table-name ${SOURCEDB} \
 		--attribute-definitions AttributeName=Id,AttributeType=N \
 		--key-schema AttributeName=Id,KeyType=HASH \
 		--billing-mode PAY_PER_REQUEST 
@@ -90,16 +102,20 @@ test/dynamodb/create:
 test/dynamodb/load:
 	aws --endpoint-url=http://localhost:4566 \
 		dynamodb batch-write-item  \
-		--request-items file://data/ProductCatalog.json
+		--request-items file://test/testdata.json
  
+test/s3/create:
+	aws s3 --endpoint http://localhost:4566 mb s3://${TESTBUCKET}
+
 test/localstack/start:
 	docker run -d -p 4566:4566 --rm --name=localstack \
 		--env DEFAULT_REGION="eu-west-1" \
 		--env FORCE_NONINTERACTIVE="true" \
 		--env SKIP_INFRA_DOWNLOADS="true" \
-                --env SERVICES="s3,dynamodb,stepfunctions" \
-                --env STEPFUNCTIONS_LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
-                localstack/localstack-light
+			--env SERVICES="s3,dynamodb,stepfunctions" \
+			--end DYNAMODB_ERROR_PROBABILITY="0.1" \
+			--env STEPFUNCTIONS_LAMBDA_ENDPOINT="http://host.docker.internal:3001" \
+			localstack/localstack-light
 
 test/localstack/stop:
 	docker stop localstack
@@ -122,6 +138,9 @@ test/state/result:
 
 test/lamda/start:
 	sam local start-lambda
+
+test/lamda/local/start:
+	sam local start-lambda --env-vars ./test/testenvironment.json
 
 test: 
 		$(GOTEST) -v ./...

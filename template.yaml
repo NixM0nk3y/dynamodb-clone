@@ -32,6 +32,8 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+          AWS_ENDPOINT: ""
+          AWS_S3_FORCEPATHSTYLE: ""
       Policies:
         - Statement:
             - Sid: AllowUpload
@@ -71,6 +73,8 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+          AWS_ENDPOINT: ""
+          AWS_S3_FORCEPATHSTYLE: ""
       Policies:
         - Statement:
             - Sid: AllowDownload
@@ -110,6 +114,8 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+          AWS_ENDPOINT: ""
+          AWS_S3_FORCEPATHSTYLE: ""
       Policies:
         - Statement:
             - Sid: AllowUpload
@@ -149,6 +155,8 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+          AWS_ENDPOINT: ""
+          AWS_S3_FORCEPATHSTYLE: ""
       Policies:
         - Statement:
             - Sid: AllowUpload

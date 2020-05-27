@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"time"
 
 	"github.com/NixM0nk3y/dynamodb-clone/log"
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
@@ -28,8 +30,47 @@ import (
 // DataWriter is a
 type DataWriter struct {
 	input state.Schema
+	sess  client.ConfigProvider
 	ctx   context.Context
 	err   error
+}
+
+func (dw *DataWriter) getSession() (sess client.ConfigProvider) {
+	logger := log.Logger(dw.ctx)
+
+	if dw.sess != nil {
+		return dw.sess
+	}
+
+	config := &aws.Config{
+		Region:     aws.String(dw.input.Region),
+		MaxRetries: aws.Int(5),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
+	}
+
+	// override endpoint supplied
+	if awsEndpoint := os.Getenv("AWS_ENDPOINT"); awsEndpoint != "" {
+		logger.Info(fmt.Sprintf("setting endpoint to %s", awsEndpoint))
+		config.Endpoint = aws.String(awsEndpoint)
+	}
+
+	// override endpoint supplied
+	if awsS3pathstyle := os.Getenv("AWS_S3_FORCEPATHSTYLE"); awsS3pathstyle != "" {
+		logger.Info("setting S3 to pathstyle")
+		config.S3ForcePathStyle = aws.Bool(true)
+	}
+
+	sess, err := session.NewSession(config)
+
+	if err != nil {
+		logger.Panic("unable generate new session", zap.Error(err))
+	}
+
+	// stash the session
+	dw.sess = sess
+
+	return
 }
 
 func (dw *DataWriter) retrieveData(key string) (records []map[string]*dynamodb.AttributeValue, err error) {
@@ -38,20 +79,9 @@ func (dw *DataWriter) retrieveData(key string) (records []map[string]*dynamodb.A
 
 	logger.Info(fmt.Sprintf("retrieving data key %s for %s", dw.input.OrigTableName, key))
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:     aws.String(dw.input.Region),
-		MaxRetries: aws.Int(5),
-		Logger:     &log.AWSLogger{},
-		LogLevel:   log.AWSLevel(),
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
 	fileName := fmt.Sprintf("%s/%s.json", dw.input.OrigTableName, key)
 
-	s3Svc := s3.New(sess)
+	s3Svc := s3.New(dw.getSession())
 	xray.AWS(s3Svc.Client)
 
 	// Create s3 Client
@@ -102,19 +132,8 @@ func (dw *DataWriter) dynamodbImport() (output state.ImportResult, err error) {
 	deadline = deadline.Add(-2500 * time.Millisecond) // dynamoDB retries take a while to return
 	timeoutChannel := time.After(time.Until(deadline))
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:     aws.String(dw.input.Region),
-		MaxRetries: aws.Int(5),
-		Logger:     &log.AWSLogger{},
-		LogLevel:   log.AWSLevel(),
-	})
-
-	if err != nil {
-		return
-	}
-
 	// Create DynamoDB client
-	svc := dynamodb.New(sess)
+	svc := dynamodb.New(dw.getSession())
 
 	xray.AWS(svc.Client)
 

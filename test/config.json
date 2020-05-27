@@ -1,0 +1,6 @@
+{
+    "region": "eu-west-1",
+    "bucket": "test-bucket",
+    "origtable": "ddbimport",
+    "newtable": "ddbimport-new"
+}

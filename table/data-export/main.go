@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/NixM0nk3y/dynamodb-clone/log"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
@@ -28,8 +30,48 @@ import (
 // DataReader is a
 type DataReader struct {
 	input state.Schema
+	sess  client.ConfigProvider
 	ctx   context.Context
 	err   error
+}
+
+func (dr *DataReader) getSession() (sess client.ConfigProvider) {
+	logger := log.Logger(dr.ctx)
+
+	if dr.sess != nil {
+		return dr.sess
+	}
+
+	config := &aws.Config{
+		Region:     aws.String(dr.input.Region),
+		MaxRetries: aws.Int(5),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
+	}
+
+	// override endpoint supplied
+	if awsEndpoint := os.Getenv("AWS_ENDPOINT"); awsEndpoint != "" {
+		logger.Info(fmt.Sprintf("setting endpoint to %s", awsEndpoint))
+		config.Endpoint = aws.String(awsEndpoint)
+	}
+
+	// override endpoint supplied
+	if awsS3pathstyle := os.Getenv("AWS_S3_FORCEPATHSTYLE"); awsS3pathstyle != "" {
+		logger.Info("setting S3 to pathstyle")
+		config.S3ForcePathStyle = aws.Bool(true)
+	}
+
+	sess, err := session.NewSession(config)
+
+	if err != nil {
+		logger.Panic("unable generate new session", zap.Error(err))
+	}
+
+	// stash the session
+	dr.sess = sess
+
+	return
+
 }
 
 func (dr *DataReader) storeItems(items []map[string]*dynamodb.AttributeValue) (storageID string, err error) {
@@ -60,16 +102,6 @@ func (dr *DataReader) storeItems(items []map[string]*dynamodb.AttributeValue) (s
 
 	logger.Info("storing items", zap.Int("records", len(records)))
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:   aws.String(dr.input.Region),
-		Logger:   &log.AWSLogger{},
-		LogLevel: log.AWSLevel(),
-	})
-
-	if err != nil {
-		return "", err
-	}
-
 	// build a ULID
 	t := time.Now().UTC()
 	entropy := rand.New(rand.NewSource(t.UnixNano()))
@@ -79,7 +111,7 @@ func (dr *DataReader) storeItems(items []map[string]*dynamodb.AttributeValue) (s
 
 	fileName := fmt.Sprintf("%v/%v.json", dr.input.OrigTableName, storageID)
 
-	s3Svc := s3.New(sess)
+	s3Svc := s3.New(dr.getSession())
 	xray.AWS(s3Svc.Client)
 
 	// Create s3 Client
@@ -109,19 +141,8 @@ func (dr *DataReader) dynamodbScan() (output state.ExportResult, err error) {
 	deadline = deadline.Add(-3000 * time.Millisecond)
 	timeoutChannel := time.After(time.Until(deadline))
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:     aws.String(dr.input.Region),
-		MaxRetries: aws.Int(5),
-		Logger:     &log.AWSLogger{},
-		LogLevel:   log.AWSLevel(),
-	})
-
-	if err != nil {
-		return
-	}
-
 	// Create DynamoDB client
-	svc := dynamodb.New(sess)
+	svc := dynamodb.New(dr.getSession())
 
 	xray.AWS(svc.Client)
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/NixM0nk3y/dynamodb-clone/log"
@@ -13,6 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -24,29 +26,59 @@ import (
 // SchemaWriter is a
 type SchemaWriter struct {
 	input state.Schema
+	sess  client.ConfigProvider
 	ctx   context.Context
 	err   error
 }
 
+func (sw *SchemaWriter) getSession() (sess client.ConfigProvider) {
+	logger := log.Logger(sw.ctx)
+
+	if sw.sess != nil {
+		return sw.sess
+	}
+
+	config := &aws.Config{
+		Region:     aws.String(sw.input.Region),
+		MaxRetries: aws.Int(5),
+		Logger:     &log.AWSLogger{},
+		LogLevel:   log.AWSLevel(),
+	}
+
+	// override endpoint supplied
+	if awsEndpoint := os.Getenv("AWS_ENDPOINT"); awsEndpoint != "" {
+		logger.Info(fmt.Sprintf("setting endpoint to %s", awsEndpoint))
+		config.Endpoint = aws.String(awsEndpoint)
+	}
+
+	// override endpoint supplied
+	if awsS3pathstyle := os.Getenv("AWS_S3_FORCEPATHSTYLE"); awsS3pathstyle != "" {
+		logger.Info("setting S3 to pathstyle")
+		config.S3ForcePathStyle = aws.Bool(true)
+	}
+
+	sess, err := session.NewSession(config)
+
+	if err != nil {
+		logger.Panic("unable generate new session", zap.Error(err))
+	}
+
+	// stash the session
+	sw.sess = sess
+
+	return
+}
+
+//
 func (sw *SchemaWriter) retrieveSchema() (tableSchema map[string]interface{}, err error) {
 
 	logger := log.Logger(sw.ctx)
 
 	logger.Info(fmt.Sprintf("retrieving schema for %s", sw.input.OrigTableName))
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:   aws.String(sw.input.Region),
-		Logger:   &log.AWSLogger{},
-		LogLevel: log.AWSLevel(),
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
 	fileName := fmt.Sprintf("%v/schema.json", sw.input.OrigTableName)
 
-	s3Svc := s3.New(sess)
+	s3Svc := s3.New(sw.getSession())
 	xray.AWS(s3Svc.Client)
 
 	// Create s3 Client
@@ -187,19 +219,8 @@ func (sw *SchemaWriter) dynamodbSchemaImport() (result bool, err error) {
 
 	logger := log.Logger(sw.ctx)
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:     aws.String(sw.input.Region),
-		MaxRetries: aws.Int(5),
-		Logger:     &log.AWSLogger{},
-		LogLevel:   log.AWSLevel(),
-	})
-
-	if err != nil {
-		return false, err
-	}
-
 	// Create DynamoDB client
-	svc := dynamodb.New(sess)
+	svc := dynamodb.New(sw.getSession())
 
 	xray.AWS(svc.Client)
 

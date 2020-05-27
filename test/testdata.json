@@ -1,5 +1,5 @@
 {
-    "ProductCatalog": [
+    "ddbimport": [
         {
             "PutRequest": {
                 "Item": {

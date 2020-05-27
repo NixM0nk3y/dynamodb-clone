@@ -1,0 +1,22 @@
+{
+    "ddbDataExportFunction": {
+        "LOG_LEVEL": "INFO",
+        "AWS_ENDPOINT": "http://host.docker.internal:4566",
+        "AWS_S3_FORCEPATHSTYLE": "true"
+    },
+    "ddbDataImportFunction": {
+        "LOG_LEVEL": "INFO",
+        "AWS_ENDPOINT": "http://host.docker.internal:4566",
+        "AWS_S3_FORCEPATHSTYLE": "true"
+    },
+    "ddbSchemaExportFunction": {
+        "LOG_LEVEL": "INFO",
+        "AWS_ENDPOINT": "http://host.docker.internal:4566",
+        "AWS_S3_FORCEPATHSTYLE": "true"
+    },
+    "ddbSchemaImportFunction": {
+        "LOG_LEVEL": "INFO",
+        "AWS_ENDPOINT": "http://host.docker.internal:4566",
+        "AWS_S3_FORCEPATHSTYLE": "true"
+    }
+}
